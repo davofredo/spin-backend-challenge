@@ -15,5 +15,14 @@ services:
       timeout: 5s
       retries: 10
 
+  # Stand-in for the external provider. Stub mappings live in ./wiremock/mappings and are mounted
+  # into the container, so editing a JSON file only needs a container restart to take effect.
+  wiremock:
+    image: wiremock/wiremock:3.13.2
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./wiremock:/home/wiremock
+
 volumes:
   postgres-data:
