@@ -53,6 +53,8 @@ Rules:
 - JPA entities and web DTOs never leak into the domain or application layers; map explicitly.
 - The application layer depends on the `TransactionProvider` and `TransactionRepository`
   **interfaces**, never on RestClient or JPA.
+- Shared application types (search criteria, page result) live in `application.model`;
+  Spring Data types never leave the persistence adapter.
 - Constructor injection only. No field injection.
 
 ## 4. Domain rules
