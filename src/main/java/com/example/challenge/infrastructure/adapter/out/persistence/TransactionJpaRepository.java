@@ -14,7 +14,7 @@ import java.util.UUID;
 /**
  * Spring Data repository over {@link TransactionJpaEntity}. Never used outside this package.
  */
-public interface TransactionJpaRepository extends JpaRepository<TransactionJpaEntity, UUID> {
+interface TransactionJpaRepository extends JpaRepository<TransactionJpaEntity, UUID> {
 
     Optional<TransactionJpaEntity> findByIdempotencyKey(String idempotencyKey);
 

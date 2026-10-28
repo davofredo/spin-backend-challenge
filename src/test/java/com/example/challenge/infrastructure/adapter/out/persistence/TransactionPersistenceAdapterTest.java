@@ -44,7 +44,7 @@ class TransactionPersistenceAdapterTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
     }
 
-    private static final Instant NOW = Instant.parse("2025-01-15T10:00:00Z");
+    private static final Instant NOW = Instant.parse("2025-01-15T10:00:00.123Z");
 
     @Autowired
     private TransactionRepository repository;
@@ -227,6 +227,63 @@ class TransactionPersistenceAdapterTest {
     }
 
     @Test
+    void shouldReturnEveryAccountNewestFirst_whenNoFilterIsGiven() {
+        repository.save(executed("acc-1", NOW));
+        repository.save(executed("acc-2", NOW.plusSeconds(1)));
+        repository.save(executed("acc-3", NOW.plusSeconds(2)));
+
+        PageResult<Transaction> page = repository.search(
+                new TransactionSearchCriteria(null, null, null, 0, 20));
+
+        assertThat(page.items())
+                .extracting(Transaction::accountId)
+                .containsExactly("acc-3", "acc-2", "acc-1");
+        assertThat(page.items())
+                .extracting(Transaction::createdAt)
+                .containsExactly(NOW.plusSeconds(2), NOW.plusSeconds(1), NOW);
+        assertThat(page.totalElements()).isEqualTo(3L);
+    }
+
+    @Test
+    void shouldOrderByIdAscending_whenTwoTransactionsShareCreatedAtAcrossAPageBoundary() {
+        UUID firstId = UUID.fromString("00000000-0000-0000-0000-000000000001");
+        UUID secondId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        Instant sharedCreatedAt = NOW.plusSeconds(2);
+        repository.save(executed("acc-1", NOW.plusSeconds(1)));
+        repository.save(executed(secondId, "acc-1", sharedCreatedAt));
+        repository.save(executed(firstId, "acc-1", sharedCreatedAt));
+        repository.save(executed("acc-1", NOW.plusSeconds(3)));
+
+        PageResult<Transaction> firstPage = repository.search(
+                new TransactionSearchCriteria("acc-1", null, null, 0, 2));
+        PageResult<Transaction> secondPage = repository.search(
+                new TransactionSearchCriteria("acc-1", null, null, 1, 2));
+
+        assertThat(firstPage.items())
+                .extracting(Transaction::createdAt)
+                .containsExactly(NOW.plusSeconds(3), sharedCreatedAt);
+        assertThat(firstPage.items().get(1).id()).isEqualTo(firstId);
+        assertThat(secondPage.items())
+                .extracting(Transaction::createdAt)
+                .containsExactly(sharedCreatedAt, NOW.plusSeconds(1));
+        assertThat(secondPage.items().get(0).id()).isEqualTo(secondId);
+    }
+
+    @Test
+    void shouldReturnEmptyItems_whenRequestedPageIsOutOfRange() {
+        repository.save(executed("acc-1", NOW));
+        repository.save(executed("acc-1", NOW.plusSeconds(1)));
+
+        PageResult<Transaction> page = repository.search(
+                new TransactionSearchCriteria(null, null, null, 5, 2));
+
+        assertThat(page.items()).isEmpty();
+        assertThat(page.page()).isEqualTo(5);
+        assertThat(page.totalElements()).isEqualTo(2L);
+        assertThat(page.totalPages()).isEqualTo(1L);
+    }
+
+    @Test
     void shouldThrowDuplicateIdempotencyKey_whenKeyIsAlreadyStored() {
         Transaction first = executed("acc-1", "key-1", NOW);
         Transaction second = executed("acc-1", "key-1", NOW.plusSeconds(1));
@@ -291,6 +348,12 @@ class TransactionPersistenceAdapterTest {
                 "prov-1", new BigDecimal("1000.00"));
     }
 
+    private static Transaction executed(UUID id, String accountId, Instant createdAt) {
+        return Transaction.executed(
+                request(id, accountId, TransactionType.CREDIT, null, createdAt),
+                "prov-1", new BigDecimal("1000.00"));
+    }
+
     private static Transaction debit(String accountId, Instant createdAt) {
         return Transaction.executed(
                 request(accountId, TransactionType.DEBIT, null, createdAt),
@@ -309,8 +372,13 @@ class TransactionPersistenceAdapterTest {
 
     private static TransactionRequest request(
             String accountId, TransactionType type, String idempotencyKey, Instant createdAt) {
+        return request(UUID.randomUUID(), accountId, type, idempotencyKey, createdAt);
+    }
+
+    private static TransactionRequest request(
+            UUID id, String accountId, TransactionType type, String idempotencyKey, Instant createdAt) {
         return new TransactionRequest(
-                UUID.randomUUID(), accountId, type, new BigDecimal("1000.00"),
+                id, accountId, type, new BigDecimal("1000.00"),
                 "MXN", "Pago de servicio", idempotencyKey, createdAt);
     }
 }

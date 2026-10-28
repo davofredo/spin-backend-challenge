@@ -1,6 +1,9 @@
 -- Executed, rejected and failed transactions.
 -- Money is NUMERIC(19,2) so that BigDecimal round-trips without rounding, and created_at is
 -- TIMESTAMPTZ because the API exposes timestamps in UTC.
+-- error_message is VARCHAR(500), not TEXT: provider rejection messages are short, and a bounded
+-- column keeps an upper limit on what an upstream response can write here instead of allowing an
+-- unbounded blob in a write-heavy table.
 CREATE TABLE transactions
 (
     id                      UUID           NOT NULL,
@@ -14,7 +17,7 @@ CREATE TABLE transactions
     provider_transaction_id VARCHAR(255),
     balance_after           NUMERIC(19, 2),
     error_code              VARCHAR(64),
-    error_message           VARCHAR(255),
+    error_message           VARCHAR(500),
     created_at              TIMESTAMPTZ    NOT NULL,
     CONSTRAINT pk_transactions PRIMARY KEY (id),
     CONSTRAINT uq_transactions_idempotency_key UNIQUE (idempotency_key)

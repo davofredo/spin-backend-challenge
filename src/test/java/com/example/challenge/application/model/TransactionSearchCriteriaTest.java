@@ -40,6 +40,27 @@ class TransactionSearchCriteriaTest {
     }
 
     @Test
+    void shouldNormaliseAccountIdToNull_whenItIsBlank() {
+        TransactionSearchCriteria criteria = new TransactionSearchCriteria("   ", null, null, 0, 20);
+
+        assertThat(criteria.accountId()).isNull();
+    }
+
+    @Test
+    void shouldNormaliseAccountIdToNull_whenItIsEmpty() {
+        TransactionSearchCriteria criteria = new TransactionSearchCriteria("", null, null, 0, 20);
+
+        assertThat(criteria.accountId()).isNull();
+    }
+
+    @Test
+    void shouldKeepAccountId_whenItHasContent() {
+        TransactionSearchCriteria criteria = new TransactionSearchCriteria("acc-123456", null, null, 0, 20);
+
+        assertThat(criteria.accountId()).isEqualTo("acc-123456");
+    }
+
+    @Test
     void shouldThrow_whenPageIsNegative() {
         assertThatThrownBy(() -> new TransactionSearchCriteria(null, null, null, -1, 20))
                 .isInstanceOf(InvalidTransactionDataException.class)

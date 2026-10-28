@@ -66,7 +66,7 @@ public class TransactionJpaEntity implements Persistable<UUID> {
     @Column(name = "error_code", length = 64)
     private String errorCode;
 
-    @Column(name = "error_message", length = 255)
+    @Column(name = "error_message", length = 500)
     private String errorMessage;
 
     @Column(name = "created_at", nullable = false, updatable = false)

@@ -65,4 +65,35 @@ class PageResultTest {
                 .isInstanceOf(NullPointerException.class)
                 .hasMessage("items");
     }
+
+    @Test
+    void shouldThrow_whenPageIsNegative() {
+        assertThatThrownBy(() -> new PageResult<String>(List.of(), -1, 20, 0L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("page must be 0 or greater, but was -1");
+    }
+
+    @Test
+    void shouldThrow_whenLimitIsZero() {
+        assertThatThrownBy(() -> new PageResult<String>(List.of(), 0, 0, 0L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("limit must be 1 or greater, but was 0");
+    }
+
+    @Test
+    void shouldThrow_whenTotalElementsIsNegative() {
+        assertThatThrownBy(() -> new PageResult<String>(List.of(), 0, 20, -1L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("totalElements must be 0 or greater, but was -1");
+    }
+
+    @Test
+    void shouldBuildPage_whenValuesAreAtTheirLowerBounds() {
+        PageResult<String> page = new PageResult<>(List.of(), 0, 1, 0L);
+
+        assertThat(page.page()).isZero();
+        assertThat(page.limit()).isEqualTo(1);
+        assertThat(page.totalElements()).isZero();
+        assertThat(page.totalPages()).isZero();
+    }
 }

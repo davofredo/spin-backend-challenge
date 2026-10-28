@@ -9,6 +9,7 @@ import com.example.challenge.domain.model.TransactionType;
  * <p>
  * Every filter is optional and they combine with AND. {@code page} is zero-based and {@code limit}
  * is the page size; the upper bound of {@code limit} belongs to the web layer, not to this model.
+ * A null or blank {@code accountId} means "no account filter".
  */
 public record TransactionSearchCriteria(
         String accountId,
@@ -18,6 +19,7 @@ public record TransactionSearchCriteria(
         int limit) {
 
     public TransactionSearchCriteria {
+        accountId = accountId == null || accountId.isBlank() ? null : accountId;
         if (page < 0) {
             throw new InvalidTransactionDataException("page must be 0 or greater, but was " + page);
         }
