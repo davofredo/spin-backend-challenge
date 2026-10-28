@@ -58,21 +58,36 @@ class TransactionTest {
     void shouldRejectExecutedTransaction_whenBalanceAfterHasMoreThanTwoDecimals() {
         assertThatThrownBy(() -> Transaction.executed(REQUEST, "prov-999", new BigDecimal("8500.005")))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("balanceAfter");
+                .hasMessage("balanceAfter must have at most 2 decimals");
     }
 
     @Test
     void shouldRejectExecutedTransaction_whenProviderTransactionIdIsBlank() {
         assertThatThrownBy(() -> Transaction.executed(REQUEST, " ", new BigDecimal("8500.00")))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("providerTransactionId");
+                .hasMessage("providerTransactionId must not be blank");
+    }
+
+    @Test
+    void shouldRejectExecutedTransaction_whenProviderTransactionIdIsNull() {
+        assertThatThrownBy(() -> Transaction.executed(REQUEST, null, new BigDecimal("8500.00")))
+                .isInstanceOf(InvalidTransactionDataException.class)
+                .hasMessage("providerTransactionId must not be blank");
     }
 
     @Test
     void shouldRejectExecutedTransaction_whenBalanceAfterIsNull() {
         assertThatThrownBy(() -> Transaction.executed(REQUEST, "prov-999", null))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("balanceAfter");
+                .hasMessage("balanceAfter must not be null");
+    }
+
+    @Test
+    void shouldAcceptZeroBalanceAfter_whenProviderApproves() {
+        Transaction transaction = Transaction.executed(REQUEST, "prov-999", BigDecimal.ZERO);
+
+        assertThat(transaction.balanceAfter()).isEqualTo(new BigDecimal("0.00"));
+        assertThat(transaction.balanceAfter().scale()).isEqualTo(2);
     }
 
     @Test
@@ -87,10 +102,26 @@ class TransactionTest {
     }
 
     @Test
-    void shouldRejectRejectedTransaction_whenErrorCodeIsBlank() {
+    void shouldAllowNullErrorMessage_whenProviderRejectsWithoutMessage() {
+        Transaction transaction = Transaction.rejected(REQUEST, "INSUFFICIENT_FUNDS", null);
+
+        assertThat(transaction.status()).isEqualTo(REJECTED);
+        assertThat(transaction.errorCode()).isEqualTo("INSUFFICIENT_FUNDS");
+        assertThat(transaction.errorMessage()).isNull();
+    }
+
+    @Test
+    void shouldRejectRejectedTransaction_whenErrorCodeIsNull() {
         assertThatThrownBy(() -> Transaction.rejected(REQUEST, null, "Not enough balance"))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("errorCode");
+                .hasMessage("errorCode must not be blank");
+    }
+
+    @Test
+    void shouldRejectRejectedTransaction_whenErrorCodeIsBlank() {
+        assertThatThrownBy(() -> Transaction.rejected(REQUEST, "   ", "Not enough balance"))
+                .isInstanceOf(InvalidTransactionDataException.class)
+                .hasMessage("errorCode must not be blank");
     }
 
     @Test
@@ -114,20 +145,20 @@ class TransactionTest {
     void shouldRejectTransaction_whenRequestIsNull() {
         assertThatThrownBy(() -> Transaction.failed(null))
                 .isInstanceOf(NullPointerException.class)
-                .hasMessageContaining("request");
+                .hasMessage("request");
     }
 
     @Test
     void shouldRejectExecutedTransaction_whenRequestIsNull() {
         assertThatThrownBy(() -> Transaction.executed(null, "prov-999", new BigDecimal("8500.00")))
                 .isInstanceOf(NullPointerException.class)
-                .hasMessageContaining("request");
+                .hasMessage("request");
     }
 
     @Test
     void shouldRejectRejectedTransaction_whenRequestIsNull() {
         assertThatThrownBy(() -> Transaction.rejected(null, "INSUFFICIENT_FUNDS", "Not enough balance"))
                 .isInstanceOf(NullPointerException.class)
-                .hasMessageContaining("request");
+                .hasMessage("request");
     }
 }

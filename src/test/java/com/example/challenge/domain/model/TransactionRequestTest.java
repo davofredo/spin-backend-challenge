@@ -30,20 +30,21 @@ class TransactionRequestTest {
         TransactionRequest request = request(new BigDecimal("1500.75"));
 
         assertThat(request.amount()).isEqualTo(new BigDecimal("1500.75"));
+        assertThat(request.amount().scale()).isEqualTo(2);
     }
 
     @Test
     void shouldRejectAmount_whenAmountHasMoreThanTwoDecimals() {
         assertThatThrownBy(() -> request(new BigDecimal("1500.755")))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("amount");
+                .hasMessage("amount must have at most 2 decimals");
     }
 
     @Test
     void shouldRejectAmount_whenAmountIsNull() {
         assertThatThrownBy(() -> request(null))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("amount must not be null");
+                .hasMessage("amount must not be null");
     }
 
     @Test
@@ -51,7 +52,7 @@ class TransactionRequestTest {
         assertThatThrownBy(() -> new TransactionRequest(
                 null, "acc-123456", CREDIT, new BigDecimal("10.00"), "MXN", null, null, CREATED_AT))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("id must not be null");
+                .hasMessage("id must not be null");
     }
 
     @Test
@@ -59,7 +60,7 @@ class TransactionRequestTest {
         assertThatThrownBy(() -> new TransactionRequest(
                 ID, null, CREDIT, new BigDecimal("10.00"), "MXN", null, null, CREATED_AT))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("accountId must not be blank");
+                .hasMessage("accountId must not be blank");
     }
 
     @Test
@@ -67,7 +68,7 @@ class TransactionRequestTest {
         assertThatThrownBy(() -> new TransactionRequest(
                 ID, "  ", CREDIT, new BigDecimal("10.00"), "MXN", null, null, CREATED_AT))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("accountId must not be blank");
+                .hasMessage("accountId must not be blank");
     }
 
     @Test
@@ -75,7 +76,7 @@ class TransactionRequestTest {
         assertThatThrownBy(() -> new TransactionRequest(
                 ID, "acc-123456", null, new BigDecimal("10.00"), "MXN", null, null, CREATED_AT))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("type must not be null");
+                .hasMessage("type must not be null");
     }
 
     @Test
@@ -83,7 +84,7 @@ class TransactionRequestTest {
         assertThatThrownBy(() -> new TransactionRequest(
                 ID, "acc-123456", CREDIT, new BigDecimal("10.00"), null, null, null, CREATED_AT))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("currency must not be blank");
+                .hasMessage("currency must not be blank");
     }
 
     @Test
@@ -91,7 +92,7 @@ class TransactionRequestTest {
         assertThatThrownBy(() -> new TransactionRequest(
                 ID, "acc-123456", CREDIT, new BigDecimal("10.00"), " ", null, null, CREATED_AT))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("currency must not be blank");
+                .hasMessage("currency must not be blank");
     }
 
     @Test
@@ -99,15 +100,31 @@ class TransactionRequestTest {
         assertThatThrownBy(() -> new TransactionRequest(
                 ID, "acc-123456", CREDIT, new BigDecimal("10.00"), "MXN", null, null, null))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("createdAt must not be null");
+                .hasMessage("createdAt must not be null");
     }
 
     @Test
-    void shouldAllowDescription_whenDescriptionIsNull() {
+    void shouldStoreNullDescription_whenDescriptionIsNull() {
         TransactionRequest request = new TransactionRequest(
                 ID, "acc-123456", CREDIT, new BigDecimal("10.00"), "MXN", null, null, CREATED_AT);
 
         assertThat(request.description()).isNull();
+    }
+
+    @Test
+    void shouldStoreNullDescription_whenDescriptionIsBlank() {
+        TransactionRequest request = new TransactionRequest(
+                ID, "acc-123456", CREDIT, new BigDecimal("10.00"), "MXN", "   ", null, CREATED_AT);
+
+        assertThat(request.description()).isNull();
+    }
+
+    @Test
+    void shouldStripDescription_whenDescriptionHasSurroundingSpaces() {
+        TransactionRequest request = new TransactionRequest(
+                ID, "acc-123456", CREDIT, new BigDecimal("10.00"), "MXN", "  Pago de servicio  ", null, CREATED_AT);
+
+        assertThat(request.description()).isEqualTo("Pago de servicio");
     }
 
     @Test
@@ -131,7 +148,7 @@ class TransactionRequestTest {
         assertThatThrownBy(() -> new TransactionRequest(
                 ID, "acc-123456", CREDIT, new BigDecimal("10.00"), "MXN", null, "   ", CREATED_AT))
                 .isInstanceOf(InvalidTransactionDataException.class)
-                .hasMessageContaining("idempotencyKey must not be blank");
+                .hasMessage("idempotencyKey must not be blank");
     }
 
     @Test

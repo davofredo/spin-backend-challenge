@@ -7,10 +7,13 @@ import java.math.BigDecimal;
 import java.util.Objects;
 
 /**
- * Business rules that must hold before a transaction is sent to the provider.
+ * Business rules a well-formed {@link TransactionRequest} must satisfy before it reaches the
+ * provider: the amount must be strictly greater than 1.00, DEBIT is capped at 10,000.00 and MXN is
+ * the only supported currency.
  * <p>
- * Input is expected to be structurally valid (non-null type and amount, non-blank currency);
- * presence checks belong to the request validation layer.
+ * Structural correctness (non-null type and amount, non-blank currency) is guaranteed by
+ * {@link TransactionRequest}, so this component reports only business rule violations, through
+ * {@link BusinessRuleViolationException}.
  */
 public final class TransactionRules {
 
@@ -18,12 +21,11 @@ public final class TransactionRules {
     private static final BigDecimal DEBIT_LIMIT = new BigDecimal("10000.00");
     private static final String SUPPORTED_CURRENCY = "MXN";
 
-    public void validate(TransactionType type, BigDecimal amount, String currency) {
-        Objects.requireNonNull(type, "type");
-        Objects.requireNonNull(amount, "amount");
-        validateMinimumAmount(amount);
-        validateDebitLimit(type, amount);
-        validateCurrency(currency);
+    public void validate(TransactionRequest request) {
+        Objects.requireNonNull(request, "request");
+        validateMinimumAmount(request.amount());
+        validateDebitLimit(request.type(), request.amount());
+        validateCurrency(request.currency());
     }
 
     private static void validateMinimumAmount(BigDecimal amount) {
