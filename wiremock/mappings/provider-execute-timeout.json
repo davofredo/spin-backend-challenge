@@ -1,0 +1,25 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/provider/v1/execute",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$[?(@.accountId == 'acc-timeout')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "fixedDelayMilliseconds": 6000,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "transactionId": "provider-txn-too-late",
+      "status": "APPROVED",
+      "balance": 1500.00,
+      "executedAt": "2026-01-01T12:00:00Z"
+    }
+  }
+}

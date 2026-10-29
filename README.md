@@ -29,9 +29,10 @@ com.example.challenge
 ├── application/model          shared application types (search criteria, page result)
 ├── application/service        use case implementations (idempotency, rules, provider call, store)
 └── infrastructure
+    ├── adapter/in/web           controllers, request/response DTOs, RFC 7807 exception handler
     ├── adapter/out/provider     HTTP provider client (Resilience4j retry + circuit breaker)
     ├── adapter/out/persistence  JPA entity, Spring Data repository, mapper
-    └── config                   provider properties, RestClient and resilience beans
+    └── config                   provider properties, RestClient, resilience and Clock beans
 ```
 
 ## Running locally
@@ -53,8 +54,19 @@ curl -i -X POST http://localhost:8081/provider/v1/execute \
 ```
 
 Stub mappings live in [`wiremock/mappings`](./wiremock/mappings) and are mounted into the container.
-Three stubs are provided: an approval, a rejection driven by `accountId == "acc-insufficient-funds"`
-and an outage driven by `accountId == "acc-provider-down"`.
+Four stubs are provided, all keyed on `accountId`:
+
+| `accountId` | Stub behaviour | Result |
+| --- | --- | --- |
+| anything else | `200 APPROVED` | `EXECUTED` |
+| `acc-insufficient-funds` | `422 { status: "REJECTED", code: "INSUFFICIENT_FUNDS" }` | `REJECTED` |
+| `acc-provider-down` | `503` | `FAILED` |
+| `acc-timeout` | `200 APPROVED` after a 6 s delay (longer than `provider.read-timeout`) | `FAILED` |
+
+The `acc-timeout` stub exercises the read timeout end to end: each attempt is cut off after
+`provider.read-timeout`, retried `max-attempts` times with backoff, and finally persisted as `FAILED`
+with `PROVIDER_UNAVAILABLE`. Expect roughly 16 s before the `502` response. WireMock also supports
+per-stub faults such as `"fault": "EMPTY_RESPONSE"` if you prefer to simulate a dropped connection.
 
 Then run the application:
 
@@ -172,12 +184,36 @@ Mockito and a fixed `Clock`: every business-rule violation (asserting the provid
 nothing is saved), the three provider outcomes with their exact persisted fields, an idempotent repeat
 and the duplicate-key race where `save` loses against a concurrent request.
 
+`ExecuteTransactionEndpointTest` and `QueryTransactionsEndpointTest` are `@WebMvcTest` slices with the
+two use cases mocked. They cover the valid request and its mapping to the use case command, every bean
+validation failure (including an oversized `Idempotency-Key`, an unreadable body and a body with an
+unknown enum), the business-rule violations answered as `422` with the rule code, `201` for `EXECUTED`
+and `REJECTED` versus `502` for `FAILED`, the query filters and pagination defaults, `limit` above
+`100`, a negative `page`, unknown `status`/`type` values, and the `ProblemDetail` shape of every error.
+
 ## API
 
-`POST /transactions` executes a transaction; `GET /transactions` queries them with
-`accountId` / `status` / `type` / `page` / `limit` filters. The use cases behind both endpoints are in
-place; the web adapter is the next stage. Domain, application, persistence and provider layers are
-already done.
+`POST /transactions` executes a transaction and `GET /transactions` queries them with
+`accountId` / `status` / `type` / `page` / `limit` filters. Both endpoints are implemented end to end
+through the use cases, so the service is complete.
+
+```bash
+curl -i -X POST http://localhost:8080/transactions \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: 4c1b2f60-1e35-4d5a-9a1e-2b7c9d0e5f11' \
+  -d '{"accountId":"acc-123456","type":"CREDIT","amount":1500.00,"currency":"MXN","description":"Transferencia recibida"}'
+# 201 {"id":"...","status":"EXECUTED","providerTransactionId":"...","balanceAfter":1500.00,...}
+
+curl -i 'http://localhost:8080/transactions?accountId=acc-123456&status=EXECUTED&page=0&limit=20'
+# 200 {"items":[...],"page":0,"limit":20,"totalElements":1,"totalPages":1}
+```
+
+An `EXECUTED` or `REJECTED` transaction is answered with `201` and its stored representation. When the
+provider outcome is unknown the transaction is still stored as `FAILED`, but the response is `502` with
+a generic `ProblemDetail`: the client cannot know whether the provider executed it, so pretending the
+call succeeded would be misleading. Business-rule violations answer `422` with a `code` property
+(`AMOUNT_TOO_LOW`, `DEBIT_LIMIT_EXCEEDED`, `UNSUPPORTED_CURRENCY`), and validation failures answer
+`400`. OpenAPI/Swagger UI is available at `/swagger-ui.html`.
 
 ## Out of scope
 
