@@ -39,6 +39,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Exercises the adapter against the real resilience4j configuration from {@code application.yml},
@@ -65,6 +66,9 @@ class ProviderHttpAdapterTest {
             """;
 
     private static final WireMockServer PROVIDER = new WireMockServer(options().dynamicPort());
+
+    private static final String MALFORMED_RESPONSE_REASON = "Malformed provider response";
+    private static final String UNEXPECTED_4XX_REASON = "Unexpected provider 4xx response";
 
     static {
         PROVIDER.start();
@@ -171,13 +175,115 @@ class ProviderHttpAdapterTest {
     }
 
     @Test
+    void shouldReturnUnavailable_whenApprovedBalanceHasMoreThanTwoDecimals() {
+        PROVIDER.stubFor(post(EXECUTE_PATH).willReturn(okJson("""
+                {"transactionId":"provider-txn-1","status":"APPROVED","balance":1500.755,
+                 "executedAt":"2026-01-01T12:00:00Z"}""")));
+
+        assertThat(provider.execute(request()))
+                .isEqualTo(new ProviderResult.Unavailable(MALFORMED_RESPONSE_REASON));
+        PROVIDER.verify(1, postRequestedFor(urlEqualTo(EXECUTE_PATH)));
+    }
+
+    @Test
+    void shouldReturnUnavailable_whenApprovedStatusIsPending() {
+        PROVIDER.stubFor(post(EXECUTE_PATH).willReturn(okJson("""
+                {"transactionId":"provider-txn-1","status":"PENDING","balance":900.00,
+                 "executedAt":"2026-01-01T12:00:00Z"}""")));
+
+        assertThat(provider.execute(request()))
+                .isEqualTo(new ProviderResult.Unavailable(MALFORMED_RESPONSE_REASON));
+        PROVIDER.verify(1, postRequestedFor(urlEqualTo(EXECUTE_PATH)));
+    }
+
+    @Test
+    void shouldReturnUnavailable_whenApprovedStatusIsNull() {
+        PROVIDER.stubFor(post(EXECUTE_PATH).willReturn(okJson("""
+                {"transactionId":"provider-txn-1","status":null,"balance":900.00,
+                 "executedAt":"2026-01-01T12:00:00Z"}""")));
+
+        assertThat(provider.execute(request()))
+                .isEqualTo(new ProviderResult.Unavailable(MALFORMED_RESPONSE_REASON));
+        PROVIDER.verify(1, postRequestedFor(urlEqualTo(EXECUTE_PATH)));
+    }
+
+    @Test
+    void shouldReturnUnavailable_whenApprovedResponseHasNoTransactionId() {
+        PROVIDER.stubFor(post(EXECUTE_PATH).willReturn(okJson("""
+                {"status":"APPROVED","balance":900.00,"executedAt":"2026-01-01T12:00:00Z"}""")));
+
+        assertThat(provider.execute(request()))
+                .isEqualTo(new ProviderResult.Unavailable(MALFORMED_RESPONSE_REASON));
+        PROVIDER.verify(1, postRequestedFor(urlEqualTo(EXECUTE_PATH)));
+    }
+
+    @Test
+    void shouldReturnUnavailable_whenApprovedResponseHasNoBalance() {
+        PROVIDER.stubFor(post(EXECUTE_PATH).willReturn(okJson("""
+                {"transactionId":"provider-txn-1","status":"APPROVED",
+                 "executedAt":"2026-01-01T12:00:00Z"}""")));
+
+        assertThat(provider.execute(request()))
+                .isEqualTo(new ProviderResult.Unavailable(MALFORMED_RESPONSE_REASON));
+        PROVIDER.verify(1, postRequestedFor(urlEqualTo(EXECUTE_PATH)));
+    }
+
+    @Test
     void shouldReturnUnavailable_whenRejectionHasNoCode() {
         PROVIDER.stubFor(post(EXECUTE_PATH).willReturn(aResponse()
                 .withStatus(422)
                 .withHeader("Content-Type", "application/json")
                 .withBody("{\"status\":\"REJECTED\",\"message\":\"No code\"}")));
 
-        assertThat(provider.execute(request())).isInstanceOf(ProviderResult.Unavailable.class);
+        assertThat(provider.execute(request()))
+                .isEqualTo(new ProviderResult.Unavailable(UNEXPECTED_4XX_REASON));
+        PROVIDER.verify(1, postRequestedFor(urlEqualTo(EXECUTE_PATH)));
+    }
+
+    @Test
+    void shouldReturnUnavailable_whenProviderAnswers401WithGatewayBody() {
+        PROVIDER.stubFor(post(EXECUTE_PATH).willReturn(aResponse()
+                .withStatus(401)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"message\":\"Unauthorized\"}")));
+
+        assertThat(provider.execute(request()))
+                .isEqualTo(new ProviderResult.Unavailable(UNEXPECTED_4XX_REASON));
+        PROVIDER.verify(1, postRequestedFor(urlEqualTo(EXECUTE_PATH)));
+        assertThat(circuitBreaker.getMetrics().getNumberOfFailedCalls()).isZero();
+    }
+
+    @Test
+    void shouldReturnUnavailable_whenProviderAnswers404WithGatewayBody() {
+        PROVIDER.stubFor(post(EXECUTE_PATH).willReturn(aResponse()
+                .withStatus(404)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"error\":\"Not Found\"}")));
+
+        assertThat(provider.execute(request()))
+                .isEqualTo(new ProviderResult.Unavailable(UNEXPECTED_4XX_REASON));
+        PROVIDER.verify(1, postRequestedFor(urlEqualTo(EXECUTE_PATH)));
+        assertThat(circuitBreaker.getMetrics().getNumberOfFailedCalls()).isZero();
+    }
+
+    @Test
+    void shouldReturnUnavailable_whenRejectionStatusIsNotRejected() {
+        PROVIDER.stubFor(post(EXECUTE_PATH).willReturn(aResponse()
+                .withStatus(422)
+                .withHeader("Content-Type", "application/json")
+                .withBody("""
+                        {"status":"ERROR","code":"SOMETHING_WENT_WRONG","message":"Unexpected"}""")));
+
+        assertThat(provider.execute(request()))
+                .isEqualTo(new ProviderResult.Unavailable(UNEXPECTED_4XX_REASON));
+        PROVIDER.verify(1, postRequestedFor(urlEqualTo(EXECUTE_PATH)));
+        assertThat(circuitBreaker.getMetrics().getNumberOfFailedCalls()).isZero();
+    }
+
+    @Test
+    void shouldThrowNullPointerException_whenRequestIsNull() {
+        assertThatThrownBy(() -> provider.execute(null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test

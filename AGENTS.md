@@ -179,11 +179,11 @@ Never expose internal exception messages or provider internals to the client.
 ## 10. Workflow
 
 - Work in small, vertical steps and keep every step compiling with green tests.
-- Small, frequent commits in Conventional Commits style (`feat:`, `test:`, `docs:`, `refactor:`).
 - Do not rewrite files wholesale when a small edit is enough.
 - Before adding a class, dependency or abstraction not described here, explain why and ask.
 - The author must be able to explain every line: prefer simple, readable solutions over
   clever ones, and explain non-obvious decisions briefly when you make them.
+- Do not commit changes. Only the autor can commit code after manual verification.
 
 ## 11. Out of scope
 

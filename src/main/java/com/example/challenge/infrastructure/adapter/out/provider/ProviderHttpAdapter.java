@@ -37,9 +37,15 @@ import java.util.function.Supplier;
  * A 4xx is returned as {@link ProviderResult.Rejected} instead of throwing, so it never matches the
  * configured {@code retry-exceptions} nor the {@code record-exceptions}, which is what keeps a
  * rejection out of both the retry and the failure statistics. 5xx, connection errors and timeouts
- * throw {@link ProviderTransientException}. Malformed or unexpected responses are reported as
- * {@link ProviderResult.Unavailable} without retrying, because repeating a call that the provider
- * did answer cannot fix a contract violation.
+ * throw {@link ProviderTransientException}.
+ * <p>
+ * A 2xx is an approval only when {@code status} is {@code APPROVED}, {@code transactionId} is
+ * present and {@code balance} is present with at most two decimals; a 4xx is a rejection only when
+ * {@code status} is {@code REJECTED} and {@code code} is present. Anything else the provider answers
+ * (401/403/404/429, gateway bodies, {@code PENDING}, a missing field) violates the contract and is
+ * reported as {@link ProviderResult.Unavailable} with a generic reason, logged at WARN naming only
+ * the offending field: repeating a call the provider did answer cannot fix a contract violation, so
+ * nothing is retried and the payload is never logged.
  */
 @Component
 @Slf4j
@@ -52,9 +58,15 @@ public class ProviderHttpAdapter implements TransactionProvider {
     /** Matches {@code transactions.error_message VARCHAR(500)}. */
     static final int MAX_ERROR_MESSAGE_LENGTH = 500;
 
+    /** Money is stored as {@code NUMERIC(19,2)}; a finer scale cannot be persisted faithfully. */
+    static final int MAX_MONEY_SCALE = 2;
+
     private static final String EXECUTE_PATH = "/provider/v1/execute";
     private static final String MALFORMED_RESPONSE = "Malformed provider response";
+    private static final String UNEXPECTED_4XX_RESPONSE = "Unexpected provider 4xx response";
     private static final String UNEXPECTED_STATUS = "Unexpected provider status";
+    private static final String APPROVED_STATUS = "APPROVED";
+    private static final String REJECTED_STATUS = "REJECTED";
 
     private final RestClient restClient;
     private final Retry retry;
@@ -100,7 +112,7 @@ public class ProviderHttpAdapter implements TransactionProvider {
             return approved(response.bodyTo(ExecuteResponse.class));
         }
         if (status.is4xxClientError()) {
-            return rejected(response.bodyTo(RejectionResponse.class));
+            return rejected(status.value(), response);
         }
         if (status.is5xxServerError()) {
             throw new ProviderTransientException("Provider responded with status " + status.value());
@@ -109,23 +121,53 @@ public class ProviderHttpAdapter implements TransactionProvider {
     }
 
     private ProviderResult approved(ExecuteResponse response) {
-        if (response == null
-                || !StringUtils.hasText(response.transactionId())
-                || response.balance() == null) {
-            return ProviderResult.unavailable(MALFORMED_RESPONSE);
+        if (response == null) {
+            return malformedResponse("body", "was empty");
+        }
+        if (!APPROVED_STATUS.equals(response.status())) {
+            return malformedResponse("status", "was " + response.status() + ", expected " + APPROVED_STATUS);
+        }
+        if (!StringUtils.hasText(response.transactionId())) {
+            return malformedResponse("transactionId", "was missing or blank");
+        }
+        if (response.balance() == null) {
+            return malformedResponse("balance", "was missing");
+        }
+        if (response.balance().scale() > MAX_MONEY_SCALE) {
+            return malformedResponse("balance",
+                    "had scale " + response.balance().scale() + ", expected at most " + MAX_MONEY_SCALE);
         }
         return new ProviderResult.Approved(response.transactionId(), response.balance(), response.executedAt());
     }
 
-    private ProviderResult rejected(RejectionResponse response) {
-        if (response == null || !StringUtils.hasText(response.code())) {
-            return ProviderResult.unavailable(MALFORMED_RESPONSE);
+    /**
+     * A 4xx is only a business rejection when the body says so; 401/403/404/429 and gateway bodies
+     * are answered by an intermediary, not by the provider contract, so they carry no business code.
+     */
+    private ProviderResult rejected(int status, ConvertibleClientHttpResponse response) throws IOException {
+        RejectionResponse body;
+        try {
+            body = response.bodyTo(RejectionResponse.class);
+        } catch (ResourceAccessException ex) {
+            throw new ProviderTransientException("Provider rejection body could not be read", ex);
+        } catch (RestClientException | HttpMessageConversionException ex) {
+            log.warn("Provider answered 4xx with an unreadable body: status={}", status);
+            return ProviderResult.unavailable(UNEXPECTED_4XX_RESPONSE);
+        }
+        if (body == null || !REJECTED_STATUS.equals(body.status()) || !StringUtils.hasText(body.code())) {
+            log.warn("Provider answered 4xx without a business rejection: status={}", status);
+            return ProviderResult.unavailable(UNEXPECTED_4XX_RESPONSE);
         }
         // The columns are bounded, and the provider is an external system: truncate here so an
         // oversized answer can never turn a rejection into a failed insert.
         return new ProviderResult.Rejected(
-                truncate(response.code(), MAX_ERROR_CODE_LENGTH),
-                truncate(response.message(), MAX_ERROR_MESSAGE_LENGTH));
+                truncate(body.code(), MAX_ERROR_CODE_LENGTH),
+                truncate(body.message(), MAX_ERROR_MESSAGE_LENGTH));
+    }
+
+    private static ProviderResult malformedResponse(String field, String reason) {
+        log.warn("Malformed provider response: field={}, reason={}", field, reason);
+        return ProviderResult.unavailable(MALFORMED_RESPONSE);
     }
 
     private static String truncate(String value, int maxLength) {
