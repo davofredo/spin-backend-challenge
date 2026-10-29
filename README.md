@@ -24,9 +24,10 @@ has no Spring, JPA or HTTP imports, and the application layer depends on the
 com.example.challenge
 ├── domain/model               Transaction, TransactionRequest, TransactionType, TransactionStatus, rules
 ├── domain/exception           business and validation exceptions
-├── application/port/in        use cases (in progress)
+├── application/port/in        ExecuteTransactionUseCase, QueryTransactionsUseCase (+ command)
 ├── application/port/out       TransactionProvider, TransactionRepository, ProviderResult
 ├── application/model          shared application types (search criteria, page result)
+├── application/service        use case implementations (idempotency, rules, provider call, store)
 └── infrastructure
     ├── adapter/out/provider     HTTP provider client (Resilience4j retry + circuit breaker)
     ├── adapter/out/persistence  JPA entity, Spring Data repository, mapper
@@ -166,11 +167,17 @@ rejection fields. There is no H2 anywhere: persistence tests run against Postgre
 applying the same Flyway migrations as production. Timing of the exponential backoff is not asserted,
 so the suite stays fast and does not depend on the scheduler.
 
+`ExecuteTransactionServiceTest` and `QueryTransactionsServiceTest` cover the application layer with
+Mockito and a fixed `Clock`: every business-rule violation (asserting the provider is never called and
+nothing is saved), the three provider outcomes with their exact persisted fields, an idempotent repeat
+and the duplicate-key race where `save` loses against a concurrent request.
+
 ## API
 
 `POST /transactions` executes a transaction; `GET /transactions` queries them with
-`accountId` / `status` / `type` / `page` / `limit` filters. The web adapter and the use cases are the
-next stages; domain, persistence and provider adapters are already in place.
+`accountId` / `status` / `type` / `page` / `limit` filters. The use cases behind both endpoints are in
+place; the web adapter is the next stage. Domain, application, persistence and provider layers are
+already done.
 
 ## Out of scope
 
