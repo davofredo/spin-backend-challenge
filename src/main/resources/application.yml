@@ -12,6 +12,10 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  jackson:
+    generator:
+      # Money is NUMERIC(19,2); serialize it as plain text so a large value never becomes 1.0E+14.
+      write-bigdecimal-as-plain: true
 
 server:
   port: ${SERVER_PORT:8080}

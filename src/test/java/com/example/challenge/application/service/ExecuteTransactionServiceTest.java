@@ -7,6 +7,7 @@ import com.example.challenge.application.port.out.TransactionProvider;
 import com.example.challenge.application.port.out.TransactionRepository;
 import com.example.challenge.domain.exception.BusinessRuleViolationException;
 import com.example.challenge.domain.exception.BusinessRuleViolationException.Code;
+import com.example.challenge.domain.exception.InvalidTransactionDataException;
 import com.example.challenge.domain.model.Transaction;
 import com.example.challenge.domain.model.TransactionRequest;
 import com.example.challenge.domain.model.TransactionStatus;
@@ -14,6 +15,8 @@ import com.example.challenge.domain.model.TransactionType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -56,6 +59,28 @@ class ExecuteTransactionServiceTest {
         service = new ExecuteTransactionService(provider, repository, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
+    // --- structurally invalid commands: rejected before any collaborator is touched ---
+
+    @Test
+    void shouldThrowNullPointerException_whenCommandIsNull() {
+        assertThatThrownBy(() -> service.execute(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("command must not be null");
+
+        verifyNoInteractions(provider, repository);
+    }
+
+    @Test
+    void shouldRejectCommand_whenAmountHasMoreThanTwoDecimals() {
+        ExecuteTransactionCommand command = command(new BigDecimal("1500.005"), TransactionType.CREDIT, "key-1");
+
+        assertThatThrownBy(() -> service.execute(command))
+                .isInstanceOf(InvalidTransactionDataException.class)
+                .hasMessage("amount must have at most 2 decimals");
+
+        verifyNoInteractions(provider, repository);
+    }
+
     // --- business rules: the provider is never called and nothing is persisted ---
 
     @Test
@@ -65,6 +90,22 @@ class ExecuteTransactionServiceTest {
         assertThatThrownBy(() -> service.execute(command))
                 .isInstanceOf(BusinessRuleViolationException.class)
                 .hasMessage("amount must be greater than 1.00, but was 1.00")
+                .extracting(exception -> ((BusinessRuleViolationException) exception).code())
+                .isEqualTo(Code.AMOUNT_TOO_LOW);
+
+        verifyNoInteractions(provider);
+        verify(repository, never()).save(any());
+    }
+
+    @ParameterizedTest(name = "amount {0}")
+    @ValueSource(strings = {"0.00", "-1500.00"})
+    void shouldRejectRequest_whenAmountIsZeroOrNegative(String amount) {
+        ExecuteTransactionCommand command =
+                command(new BigDecimal(amount), TransactionType.CREDIT, null);
+
+        assertThatThrownBy(() -> service.execute(command))
+                .isInstanceOf(BusinessRuleViolationException.class)
+                .hasMessage("amount must be greater than 1.00, but was " + amount)
                 .extracting(exception -> ((BusinessRuleViolationException) exception).code())
                 .isEqualTo(Code.AMOUNT_TOO_LOW);
 

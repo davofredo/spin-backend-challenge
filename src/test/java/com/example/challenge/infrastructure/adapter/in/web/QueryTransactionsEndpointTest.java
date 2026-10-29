@@ -89,8 +89,38 @@ class QueryTransactionsEndpointTest {
     }
 
     @Test
+    void shouldTreatAccountIdAsAbsent_whenItIsEmpty() throws Exception {
+        when(queryTransactions.search(any())).thenReturn(new PageResult<>(List.of(), 0, 20, 0));
+
+        mockMvc.perform(get("/transactions").param("accountId", ""))
+                .andExpect(status().isOk());
+
+        assertThat(capturedCriteria().accountId()).isNull();
+    }
+
+    @Test
+    void shouldTreatAccountIdAsAbsent_whenItIsOnlyWhitespace() throws Exception {
+        when(queryTransactions.search(any())).thenReturn(new PageResult<>(List.of(), 0, 20, 0));
+
+        mockMvc.perform(get("/transactions").param("accountId", "  "))
+                .andExpect(status().isOk());
+
+        assertThat(capturedCriteria().accountId()).isNull();
+    }
+
+    @Test
     void shouldReturnBadRequest_whenLimitExceedsMaximum() throws Exception {
         mockMvc.perform(get("/transactions").param("limit", "101"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.detail").value("One or more fields are invalid"));
+
+        verifyNoInteractions(queryTransactions);
+    }
+
+    @Test
+    void shouldReturnBadRequest_whenLimitIsZero() throws Exception {
+        mockMvc.perform(get("/transactions").param("limit", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.detail").value("One or more fields are invalid"));

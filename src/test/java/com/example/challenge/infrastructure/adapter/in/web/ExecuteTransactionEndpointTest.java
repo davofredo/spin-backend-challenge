@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -120,7 +121,8 @@ class ExecuteTransactionEndpointTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(validBody())))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400));
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.detail").value("One or more fields are invalid"));
 
         verifyNoInteractions(executeTransaction);
     }
@@ -172,21 +174,73 @@ class ExecuteTransactionEndpointTest {
                 .andExpect(jsonPath("$.detail").value("amount must be greater than 1.00, but was 1.00"));
     }
 
-    @Test
-    void shouldReturnUnprocessableEntityWithRuleCode_whenCurrencyIsNotSupported() throws Exception {
+    @ParameterizedTest(name = "currency {0}")
+    @ValueSource(strings = {"USD", "mxn"})
+    void shouldReturnUnprocessableEntityWithRuleCode_whenCurrencyIsNotSupported(String currency) throws Exception {
         when(executeTransaction.execute(any())).thenThrow(new BusinessRuleViolationException(
                 BusinessRuleViolationException.Code.UNSUPPORTED_CURRENCY,
-                "currency must be MXN, but was USD"));
+                "currency must be MXN, but was " + currency));
 
         Map<String, Object> body = validBody();
-        body.put("currency", "USD");
+        body.put("currency", currency);
 
         mockMvc.perform(post("/transactions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json(body)))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("UNSUPPORTED_CURRENCY"))
-                .andExpect(jsonPath("$.detail").value("currency must be MXN, but was USD"));
+                .andExpect(jsonPath("$.detail").value("currency must be MXN, but was " + currency));
+    }
+
+    @ParameterizedTest(name = "currency {0}")
+    @ValueSource(strings = {"US", "MXNN"})
+    void shouldReturnBadRequest_whenCurrencyLengthIsNotThree(String currency) throws Exception {
+        Map<String, Object> body = validBody();
+        body.put("currency", currency);
+
+        mockMvc.perform(post("/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(body)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.detail").value("One or more fields are invalid"));
+
+        verifyNoInteractions(executeTransaction);
+    }
+
+    @ParameterizedTest(name = "amount {0}")
+    @ValueSource(strings = {"1.00", "0", "-5.00"})
+    void shouldReturnUnprocessableEntityWithRuleCode_whenAmountIsNotAboveTheMinimum(String amount)
+            throws Exception {
+        BigDecimal value = new BigDecimal(amount).setScale(2);
+        when(executeTransaction.execute(any())).thenThrow(new BusinessRuleViolationException(
+                BusinessRuleViolationException.Code.AMOUNT_TOO_LOW,
+                "amount must be greater than 1.00, but was " + value.toPlainString()));
+
+        mockMvc.perform(post("/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(bodyWith(value))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.status").value(422))
+                .andExpect(jsonPath("$.code").value("AMOUNT_TOO_LOW"))
+                .andExpect(jsonPath("$.detail").value(
+                        "amount must be greater than 1.00, but was " + value.toPlainString()));
+
+        verify(executeTransaction).execute(any());
+    }
+
+    @Test
+    void shouldSerializeLargeAmountAsPlainDecimal_whenCreditIsAccepted() throws Exception {
+        BigDecimal hugeAmount = new BigDecimal("100000000000000.00");
+        when(executeTransaction.execute(any())).thenReturn(
+                Transaction.executed(requestWith(hugeAmount), "prov-huge", hugeAmount));
+
+        mockMvc.perform(post("/transactions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json(bodyWith(hugeAmount))))
+                .andExpect(status().isCreated())
+                .andExpect(content().string(containsString("\"amount\":100000000000000.00")))
+                .andExpect(content().string(not(containsString("E+"))));
     }
 
     @Test
@@ -285,18 +339,26 @@ class ExecuteTransactionEndpointTest {
     }
 
     private static Map<String, Object> validBody() {
+        return bodyWith(new BigDecimal("1500.00"));
+    }
+
+    private static Map<String, Object> bodyWith(BigDecimal amount) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("accountId", "acc-123456");
         body.put("type", "CREDIT");
-        body.put("amount", new BigDecimal("1500.00"));
+        body.put("amount", amount);
         body.put("currency", "MXN");
         body.put("description", "Transferencia recibida");
         return body;
     }
 
     private static TransactionRequest request() {
+        return requestWith(new BigDecimal("1500.00"));
+    }
+
+    private static TransactionRequest requestWith(BigDecimal amount) {
         return new TransactionRequest(
-                TRANSACTION_ID, "acc-123456", TransactionType.CREDIT, new BigDecimal("1500.00"),
+                TRANSACTION_ID, "acc-123456", TransactionType.CREDIT, amount,
                 "MXN", "Transferencia recibida", null, CREATED_AT);
     }
 
