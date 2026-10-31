@@ -1,0 +1,704 @@
+opencollection: 1.0.0
+info:
+  name: spin-backend-challenge
+config:
+  proxy:
+    inherit: true
+    config:
+      protocol: http
+      hostname: ''
+      port: ''
+      auth:
+        username: ''
+        password: ''
+      bypassProxy: ''
+items:
+  - info:
+      name: POST
+      type: folder
+      seq: 1
+    request:
+      auth: inherit
+    items:
+      - info:
+          name: CREDIT
+          type: folder
+          seq: 1
+        request:
+          auth: inherit
+        items:
+          - info:
+              name: success
+              type: folder
+              seq: 1
+            request:
+              auth: inherit
+            items:
+              - info:
+                  name: Valid amount greater than DEBIT limit
+                  type: http
+                  seq: 1
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "account-0002",
+                        "type": "CREDIT",
+                        "amount": 15000.00,
+                        "currency": "MXN",
+                        "description": "Successful CREDIT transaction for $15,000.00 MXN."
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+              - info:
+                  name: Valid amount lower than DEBIT limit
+                  type: http
+                  seq: 2
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "account-0001",
+                        "type": "CREDIT",
+                        "amount": 5000.00,
+                        "currency": "MXN",
+                        "description": "Successful CREDIT transaction for $5,000.00 MXN."
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+              - info:
+                  name: Valid amount lower than DEBIT limit re-use-idempotency-key
+                  type: http
+                  seq: 3
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: test-idempotency-key-01
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "account-0001",
+                        "type": "CREDIT",
+                        "amount": 6000.00,
+                        "currency": "MXN",
+                        "description": "If the transaction is executed for a second time, the transaction never reaches the provider (try changing the amount)"
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+              - info:
+                  name: Huge CREDIT
+                  type: http
+                  seq: 4
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "account-0002",
+                        "type": "CREDIT",
+                        "amount": 15000000000000000.00,
+                        "currency": "MXN",
+                        "description": "Successful CREDIT transaction for $???? MXN."
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+          - info:
+              name: bad-request
+              type: folder
+              seq: 2
+            request:
+              auth: inherit
+            items:
+              - info:
+                  name: Invalid amount with 3 decimal positions
+                  type: http
+                  seq: 3
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "account-0001",
+                        "type": "CREDIT",
+                        "amount": 100.123,
+                        "currency": "MXN",
+                        "description": "Invalid amount with 3 decimal positions"
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+              - info:
+                  name: Invalid currency USD
+                  type: http
+                  seq: 1
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "account-0001",
+                        "type": "CREDIT",
+                        "amount": 100.12,
+                        "currency": "USD",
+                        "description": "Invalid currency USD"
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+              - info:
+                  name: Missing accountId
+                  type: http
+                  seq: 2
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "type": "CREDIT",
+                        "amount": 100.12,
+                        "currency": "MXN",
+                        "description": "Missing accountId"
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+              - info:
+                  name: Validation shadows provider down
+                  type: http
+                  seq: 4
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "acc-provider-down",
+                        "type": "CREDIT",
+                        "amount": 100.12,
+                        "currency": "USD",
+                        "description": "Invalid amount with 3 decimal positions"
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+          - info:
+              name: bad-gateway
+              type: folder
+              seq: 3
+            request:
+              auth: inherit
+            items:
+              - info:
+                  name: Provider down
+                  type: http
+                  seq: 1
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "acc-provider-down",
+                        "type": "CREDIT",
+                        "amount": 100.12,
+                        "currency": "MXN",
+                        "description": "Provider is down"
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+              - info:
+                  name: Provider down - fixed idempotency key
+                  type: http
+                  seq: 2
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: idempotency-key-005
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "acc-provider-down",
+                        "type": "CREDIT",
+                        "amount": 100.12,
+                        "currency": "MXN",
+                        "description": "Provider is down with idempotency key retried (change accountId to test)"
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+      - info:
+          name: DEBIT
+          type: folder
+          seq: 2
+        request:
+          auth: inherit
+        items:
+          - info:
+              name: success
+              type: folder
+              seq: 1
+            request:
+              auth: inherit
+            items:
+              - info:
+                  name: Valid amount 5000
+                  type: http
+                  seq: 4
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "account-0004",
+                        "type": "DEBIT",
+                        "amount": 5000.00,
+                        "currency": "MXN",
+                        "description": "Successful DEBIT transaction for $5,000.00 MXN."
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+              - info:
+                  name: Valid amount 10000
+                  type: http
+                  seq: 2
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "account-0004",
+                        "type": "DEBIT",
+                        "amount": 10000.00,
+                        "currency": "MXN",
+                        "description": "Successful DEBIT transaction for $10,000.00 MXN."
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+              - info:
+                  name: Valid amount 1.01
+                  type: http
+                  seq: 3
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "account-0004",
+                        "type": "DEBIT",
+                        "amount": 1.01,
+                        "currency": "MXN",
+                        "description": "Successful DEBIT transaction for $1.01 MXN."
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+          - info:
+              name: bad-request
+              type: folder
+              seq: 2
+            request:
+              auth: inherit
+            items:
+              - info:
+                  name: High DEBIT 10000.01
+                  type: http
+                  seq: 2
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "account-0004",
+                        "type": "DEBIT",
+                        "amount": 10000.01,
+                        "currency": "MXN",
+                        "description": "Rejected DEBIT for $10,000.01 MXN."
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+              - info:
+                  name: Low DEBIT 1.00
+                  type: http
+                  seq: 2
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "account-0004",
+                        "type": "DEBIT",
+                        "amount": 1.00,
+                        "currency": "MXN",
+                        "description": "Rejected DEBIT for $1.00 MXN."
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+              - info:
+                  name: Insufficient funds
+                  type: http
+                  seq: 3
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "acc-insufficient-funds",
+                        "type": "DEBIT",
+                        "amount": 5000.00,
+                        "currency": "MXN",
+                        "description": "Rejected DEBIT due to insufficient funds."
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+          - info:
+              name: bad-gateway
+              type: folder
+              seq: 3
+            request:
+              auth: inherit
+            items:
+              - info:
+                  name: Provider timeout
+                  type: http
+                  seq: 3
+                http:
+                  method: POST
+                  url: http://localhost:8080/transactions
+                  headers:
+                    - name: Content-Type
+                      value: application/json
+                    - name: Accept
+                      value: application/json
+                    - name: Idempotency-Key
+                      value: '{{$randomUUID}}'
+                  body:
+                    type: json
+                    data: |-
+                      {
+                        "accountId": "acc-timeout",
+                        "type": "DEBIT",
+                        "amount": 100.12,
+                        "currency": "MXN",
+                        "description": "Provider responds too late"
+                      }
+                  auth: inherit
+                settings:
+                  encodeUrl: true
+                  timeout: 0
+                  followRedirects: true
+                  maxRedirects: 5
+                  forwardAuthorizationHeader: false
+  - info:
+      name: GET
+      type: folder
+      seq: 2
+    request:
+      auth: inherit
+    items:
+      - info:
+          name: success
+          type: folder
+          seq: 1
+        request:
+          auth: inherit
+        items:
+          - info:
+              name: All
+              type: http
+              seq: 1
+            http:
+              method: GET
+              url: http://localhost:8080/transactions
+              auth: inherit
+            settings:
+              encodeUrl: true
+              timeout: 0
+              followRedirects: true
+              maxRedirects: 5
+              forwardAuthorizationHeader: false
+          - info:
+              name: Filter by accountId
+              type: http
+              seq: 2
+            http:
+              method: GET
+              url: http://localhost:8080/transactions?accountId=account-0001
+              params:
+                - name: accountId
+                  value: account-0001
+                  type: query
+              auth: inherit
+            settings:
+              encodeUrl: true
+              timeout: 0
+              followRedirects: true
+              maxRedirects: 5
+              forwardAuthorizationHeader: false
+          - info:
+              name: Filter by accountId acc-provider-down
+              type: http
+              seq: 3
+            http:
+              method: GET
+              url: http://localhost:8080/transactions?accountId=acc-provider-down
+              params:
+                - name: accountId
+                  value: acc-provider-down
+                  type: query
+              auth: inherit
+            settings:
+              encodeUrl: true
+              timeout: 0
+              followRedirects: true
+              maxRedirects: 5
+              forwardAuthorizationHeader: false
+      - info:
+          name: bad-request
+          type: folder
+          seq: 2
+        request:
+          auth: inherit
+        items:
+          - info:
+              name: Invalid page size
+              type: http
+              seq: 1
+            http:
+              method: GET
+              url: http://localhost:8080/transactions?limit=101&page=1
+              params:
+                - name: limit
+                  value: '101'
+                  type: query
+                - name: page
+                  value: '1'
+                  type: query
+              auth: inherit
+            settings:
+              encodeUrl: true
+              timeout: 0
+              followRedirects: true
+              maxRedirects: 5
+              forwardAuthorizationHeader: false
+bundled: true
+extensions:
+  bruno:
+    ignore:
+      - node_modules
+      - .git
+    exportedAt: '2026-10-31T03:08:58.165Z'
+    exportedUsing: Bruno
